@@ -74,6 +74,14 @@ class DatabaseManager:
             
             results = cur.fetchall()
             return [(text, float(score)) for text, score in results]
+        
+    def embedding_exists(self, text_id):
+        """Check if an embedding already exists in the database."""
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM embeddings WHERE text_id = %s;", (text_id,))
+            count = cur.fetchone()[0]
+            return count > 0  # Return True if exists, False otherwise
+
 
     def add_chat_to_db(self, query, response):
         """Add a chat entry to the database and to the custom history manager."""
@@ -88,8 +96,10 @@ class DatabaseManager:
         self.chat_history_manager.add_chat(query, response)
 
     def get_last_five_chats(self):
-        """Retrieve the last 5 chats."""
-        return self.chat_history_manager.get_last_chats()
+        """Retrieve the last 5 chats from the database."""
+        with self.conn.cursor() as cur:
+            cur.execute("SELECT query, response FROM chat_history ORDER BY id DESC LIMIT 5;")
+            return cur.fetchall()  # Return the last 5 chats
 
     def get_chat_history(self):
         """Retrieve all chat history from the database."""
