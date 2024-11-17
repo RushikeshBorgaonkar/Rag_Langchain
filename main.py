@@ -2,14 +2,14 @@ import os
 from flask import Flask, request, render_template_string, session
 from database import DatabaseManager
 from embedding_generator import EmbeddingGenerator
-from langchain_groq import ChatGroq  # Import ChatGroq from langchain_groq
-from langchain_core.prompts import ChatPromptTemplate  # Import ChatPromptTemplate
+from langchain_groq import ChatGroq  
+from langchain_core.prompts import ChatPromptTemplate  
 from langchain_community.document_loaders import PyPDFLoader
 from typing import List
 from langchain.text_splitter import CharacterTextSplitter
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)  # Secret key for session management
+app.secret_key = os.urandom(24)  
 
 DATA_FILE_PATHS = [
     'C:/Users/Coditas-Admin/Desktop/ALL FOLDERS/VINOD GIVEN ASSIGNMENTS/RAG USING LANGCHAIN/DATA/attention_all_you_need.pdf', 
@@ -33,50 +33,49 @@ def load_text_samples(file_paths):
     return list(dict.fromkeys(filter(None, texts)))
 
 def process_embeddings(texts, db_manager):
-    embedding_gen = EmbeddingGenerator()  # Create an instance of EmbeddingGenerator
+    embedding_gen = EmbeddingGenerator()  
     for idx, text in enumerate(texts):
-        text_id = str(idx)  # Use a unique identifier for each text
-        if not db_manager.embedding_exists(text_id):  # Check if the embedding already exists
-            embedding = embedding_gen.generate_embedding(text)  # Generate the embedding
-            db_manager.add_embedding_to_db(embedding, text_id=text_id, text_content=text)  # Store the embedding in the database
-            print(f"Added embedding for: {text}")  # Print added embedding to terminal
+        text_id = str(idx)  
+        if not db_manager.embedding_exists(text_id): 
+            embedding = embedding_gen.generate_embedding(text)  
+            db_manager.add_embedding_to_db(embedding, text_id=text_id, text_content=text)  
+            print(f"Added embedding for: {text}") 
         else:
             print(f"Embedding already exists for: {text_id}. Retrieving existing embedding.")
 
 def generate_augmented_response(query: str, retrieved_items: List[tuple[str, float]], db_manager: DatabaseManager, embedding_gen: EmbeddingGenerator, last_five_context: str):
-    # Initialize the text splitter
+    
     text_splitter = CharacterTextSplitter(
-        chunk_size=5000,  # Set the desired chunk size
-        chunk_overlap=500  # Set the desired overlap between chunks
+        chunk_size=5000,  
+        chunk_overlap=500  
     )
 
-    # Chunk the retrieved documents and store embeddings
+    
     all_chunks = []
-    for idx, (text, _) in enumerate(retrieved_items):  # Ensure retrieved_items has the correct structure
-        chunks = text_splitter.split_text(text)  # Use Langchain's text splitter
-        all_chunks.extend(chunks)  # Add the chunks to the list
+    for idx, (text, _) in enumerate(retrieved_items):  
+        chunks = text_splitter.split_text(text)  
+        all_chunks.extend(chunks)  
 
-        # Process each chunk to create embeddings
         for chunk in chunks:
-            text_id = f"{idx}_{chunks.index(chunk)}"  # Create a unique ID for each chunk
-            if not db_manager.embedding_exists(text_id):  # Check if the embedding already exists
-                embedding = embedding_gen.generate_embedding(chunk)  # Use the embedding generator
+            text_id = f"{idx}_{chunks.index(chunk)}"  
+            if not db_manager.embedding_exists(text_id): 
+                embedding = embedding_gen.generate_embedding(chunk)  
                 db_manager.add_embedding_to_db(embedding, text_id=text_id, text_content=chunk)
-                print(f"Added embedding for chunk: {chunk}")  # Print added embedding to terminal
+                print(f"Added embedding for chunk: {chunk}")  
             else:
                 print(f"Embedding already exists for chunk: {text_id}. Retrieving existing embedding.")
 
-    # Create context from the chunks and last 5 chats
+    
     context = f"{last_five_context}\n\n" + "\n\n".join(f"Document {idx + 1}:\n{chunk}" for idx, chunk in enumerate(all_chunks))
     
-    # Initialize ChatGroq client with the API key
+
     llm = ChatGroq(
-        model="mixtral-8x7b-32768",  # Specify your model
+        model="mixtral-8x7b-32768",  
         temperature=0.5,
         max_tokens=1024,
     )
 
-    # Create a prompt template
+    
     prompt = ChatPromptTemplate.from_messages(
         [
             (
@@ -87,18 +86,18 @@ def generate_augmented_response(query: str, retrieved_items: List[tuple[str, flo
         ]
     )
 
-    # Create a chain from the prompt and the LLM
+   
     chain = prompt | llm
 
-    # Invoke the chain with the necessary parameters
+   
     ai_msg = chain.invoke({
-        "input_language": "English",  # You can adjust this as needed
-        "output_language": "English",  # You can adjust this as needed
-        "input": query,  # Pass the query as input
+        "input_language": "English",  
+        "output_language": "English",  
+        "input": query, 
     }) 
 
-    # Extract the response
-    response = ai_msg.content.strip()  # Adjusted to access the response correctly
+   
+    response = ai_msg.content.strip()  
     
     return {
         "query": query,
@@ -107,48 +106,64 @@ def generate_augmented_response(query: str, retrieved_items: List[tuple[str, flo
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    db_manager = DatabaseManager()  # Initialize the database manager
+    db_manager = DatabaseManager()  
     try:
         if request.method == 'POST':
             query_text = request.form['query']
             embedding_gen = EmbeddingGenerator()
 
-            # Clear previous embeddings if needed
+           
             db_manager.clear_embeddings()
 
-            # Load text samples and process embeddings
+     
             texts = load_text_samples(DATA_FILE_PATHS)
-            process_embeddings(texts, db_manager)  # Call the process_embeddings function
+            process_embeddings(texts, db_manager)  
 
-            # Retrieve the last 5 chats
+           
             last_five_chats = db_manager.get_last_five_chats()
             last_five_context = "\n\n".join(f"User: {chat[0]}\nAssistant: {chat[1]}" for chat in last_five_chats)
 
-            # Example of how to populate retrieved_items correctly
-            retrieved_items = []  # This should be populated based on your logic
-            # Populate retrieved_items with tuples of (text, score)
-            # For example:
-            retrieved_items.append(("Some text", 0.85))  # Add your logic here
+            
+            retrieved_items = []
 
-            # Generate a response using the last 5 chats as context
+           
+            for chat in last_five_chats:
+                
+                retrieved_items.append((chat[0], 1.0))  
+
+            # Check if retrieved_items is empty
+            if not retrieved_items:
+                print("No relevant items found for the query.")
+                # Handle the case where no relevant items are found
+                return render_template_string('''<h1>No Results Found</h1>
+                    <p>Please try a different query.</p>
+                    <form method="POST">
+                        <input type="text" name="query" placeholder="Enter your next query" required>
+                        <button type="submit">Submit</button>
+                    </form>
+                    <a href="/">Back</a>
+                ''')
+
+            print(f"Retrieved Items : {retrieved_items}" )
+          
             result = generate_augmented_response(query_text, retrieved_items, db_manager, embedding_gen, last_five_context)
 
-            # Store the result in the session
+     
             session['result'] = result
             
-            # Store chat history in the database
+           
             db_manager.add_chat_to_db(query_text, result['generated_response'])
 
-            # Retrieve chat history from the database
-            chat_history = db_manager.get_last_five_chats()  # Get only the last 5 chats
+            
+            chat_history = db_manager.get_last_five_chats()  
 
-            # Render the result in the browser
+            #
             return render_template_string('''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chatbot</title>
+    <title>Rushi Chatbot</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -231,7 +246,7 @@ def index():
 </head>
 <body>
     <div class="container">
-        <h1>Chatbot</h1>
+        <h1>Rushi Chatbot</h1>
         <h2>Query: {{ result.query }}</h2>
         <h3>Generated Response:</h3>
         <p class="response">{{ result.generated_response }}</p>
