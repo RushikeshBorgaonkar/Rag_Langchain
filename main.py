@@ -7,7 +7,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.document_loaders import PyPDFLoader
 from typing import List
 from langchain.text_splitter import CharacterTextSplitter
-
+from models import QueryInput, AugmentedResponse  # Import Pydantic models from models.py
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  
@@ -87,6 +87,7 @@ def generate_augmented_response(query: str, retrieved_items: List[tuple[str,str]
         "generated_response": response
     }
 
+ 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     session_id = session.get('session_id', None)
@@ -94,28 +95,28 @@ def index():
     session['session_id'] = chat_history._session_id  
 
     if request.method == 'POST':
-        query_text = request.form['query']
-
+        
+        query_input = QueryInput(query=request.form['query'])
+        
         texts = load_text_samples(DATA_FILE_PATHS)
-        process_embeddings(texts)
+        # process_embeddings(texts)
         
         last_five_chats = get_recent_chat_history(chat_history)
         print(f"last five chats are : {last_five_chats}")
         last_five_context = "\n\n".join(f"User: {chat[0]}" for chat in last_five_chats)
         print(f"last_five_context are :{last_five_context} ")
 
-       
         retrieved_items = last_five_chats  
 
-        result = generate_augmented_response(query_text, retrieved_items, last_five_context)
+        result = generate_augmented_response(query_input.query, retrieved_items, last_five_context)
 
-        session['result'] = result
-        
-        add_chat_to_db(chat_history, query_text, result['generated_response'])  
-
+        structured_result = AugmentedResponse(**result)  
+        session['result'] = structured_result.dict()  
+        add_chat_to_db(chat_history, query_input.query, structured_result.generated_response) 
+        print(structured_result)
         chat_history = get_recent_chat_history(chat_history) 
 
-        return render_template('chatbot.html', result=result, chat_history=chat_history)  
+        return render_template('chatbot.html', result=structured_result.dict(), chat_history=chat_history)  
 
     return '''
             <form method="POST">
@@ -124,6 +125,5 @@ def index():
             </form>
         '''
    
-
 if __name__ == "__main__":
     app.run(debug=True)
