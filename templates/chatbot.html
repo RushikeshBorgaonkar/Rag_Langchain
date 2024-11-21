@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rushi Chatbot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        h2 {
+            color: #555;
+        }
+        h3 {
+            color: #777;
+        }
+        .response {
+            background-color: #e9ecef;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .chat-history {
+            margin: 20px 0;
+            border-top: 1px solid #ccc;
+            padding-top: 10px;
+        }
+        .chat-item {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f8f9fa;
+        }
+        .chat-item strong {
+            display: block;
+            color: #333;
+        }
+        form {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        a {
+            display: inline-block;
+            margin-top: 20px;
+            text-decoration: none;
+            color: #007bff;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Rushi Chatbot</h1>
+        <h2>Query: {{ result.query }}</h2>
+        <h3>Generated Response:</h3>
+        <p class="response">{{ result.generated_response }}</p>
+        <div class="chat-history">
+            <h3>Last 5 Chats:</h3>
+            <ul>
+                {% for chat in chat_history %}
+                    <li class="chat-item">
+                        <strong>Query:</strong> {{ chat[0] }} <br>
+                        <strong>Response:</strong> {{ chat[1] }}
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+        <form method="POST">
+            <input type="text" name="query" placeholder="Enter your next query" required>
+            <button type="submit">Submit</button>
+        </form>
+        <a href="/">Back</a>
+    </div>
+</body>
+</html>

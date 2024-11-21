@@ -1,119 +1,95 @@
 import os
+import uuid
 from dotenv import load_dotenv
-import psycopg2
-import numpy as np
-from langchain.memory import ConversationBufferMemory
-from collections import deque
+import psycopg
+from langchain_postgres import PGVector
+from langchain_postgres.vectorstores import PGVector as VectorStore
+from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
+from embedding_generator import generate_embedding  
+from langchain_postgres import PostgresChatMessageHistory
 
 load_dotenv()
 
-class ChatHistoryManager:
-    def __init__(self, max_size=5):
-        self.history = []  # List to store chat history
-        self.max_size = max_size  # Maximum size of the history
-
-    def add_chat(self, user_message, assistant_message):
-        """Add a chat entry to the history."""
-        self.history.append((user_message, assistant_message))
-        if len(self.history) > self.max_size:
-            self.history.pop(0)  # Remove the oldest entry if exceeding max size
-
-    def get_last_chats(self):
-        """Retrieve the last chats."""
-        return self.history
-
-class DatabaseManager:
-    def __init__(self):
-        self.conn = psycopg2.connect(
-            dbname=os.getenv('DB_NAME'),
-            user=os.getenv('DB_USER'),
-            password=os.getenv('DB_PASS'),
-            host=os.getenv('DB_HOST'),
-            port=os.getenv('DB_PORT', '5432')
-        )
-        self.create_tables()
-        self.chat_history_manager = ChatHistoryManager(max_size=5)  # Initialize the custom chat history manager
-
-    def create_tables(self):
-        with self.conn.cursor() as cur:
-            cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS embeddings (
-                    text_id VARCHAR(255),
-                    text_content TEXT,
-                    embedding vector(384)
-                );
-            """)
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS chat_history (
-                    id SERIAL PRIMARY KEY,
-                    query TEXT,
-                    response TEXT
-                );
-            """)
-            self.conn.commit()
-
-    def add_embedding_to_db(self, embedding, text_id, text_content):
-        with self.conn.cursor() as cur:
-            embedding_list = embedding.tolist() if isinstance(embedding, np.ndarray) else embedding
-            cur.execute(
-                "INSERT INTO embeddings (text_id, text_content, embedding) VALUES (%s, %s, %s)",
-                (text_id, text_content, embedding_list)
-            )
-            self.conn.commit()
-
-    def search_similar_vectors(self, query_embedding, top_k=2):
-        with self.conn.cursor() as cur:
-            query_list = query_embedding.tolist() if isinstance(query_embedding, np.ndarray) else query_embedding
-            cur.execute("""
-                SELECT text_content, 1 - (embedding <=> %s::vector) as similarity
-                FROM embeddings
-                ORDER BY embedding <=> %s::vector
-                LIMIT %s;
-            """, (query_list, query_list, top_k))
-            
-            results = cur.fetchall()
-            return [(text, float(score)) for text, score in results]
-        
-    def embedding_exists(self, text_id):
-        """Check if an embedding already exists in the database."""
-        with self.conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM embeddings WHERE text_id = %s;", (text_id,))
-            count = cur.fetchone()[0]
-            return count > 0  # Return True if exists, False otherwise
+# Initialize global variables
+DB_HOST = os.environ.get("DB_HOST")
+DB_NAME = os.environ.get("DB_NAME")
+DB_USER = os.environ.get("DB_USER")
+DB_PASS = os.environ.get("DB_PASS")
+DB_PORT = os.environ.get("DB_PORT", "5432")  
 
 
-    def add_chat_to_db(self, query, response):
-        """Add a chat entry to the database and to the custom history manager."""
-        with self.conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO chat_history (query, response) VALUES (%s, %s)",
-                (query, response)
-            )
-            self.conn.commit()
-        
-        # Store the chat in the custom history manager
-        self.chat_history_manager.add_chat(query, response)
+connection = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-    def get_last_five_chats(self):
-        """Retrieve the last 5 chats from the database."""
-        with self.conn.cursor() as cur:
-            cur.execute("SELECT query, response FROM chat_history ORDER BY id DESC LIMIT 5;")
-            return cur.fetchall()  # Return the last 5 chats
+collection_name = "embeddings"
 
-    def get_chat_history(self):
-        """Retrieve all chat history from the database."""
-        with self.conn.cursor() as cur:
-            cur.execute("SELECT query, response FROM chat_history ORDER BY id DESC;")
-            db_history = cur.fetchall()
-        
-        return db_history  # Return only database history
 
-    def close(self):
-        self.conn.close()
+def initialize_chat_history(session_id=None):
+    table_name = "chat_history"
+    
+    
+    sync_connection = psycopg.connect(connection)
+    
+    PostgresChatMessageHistory.create_tables(sync_connection, table_name)
+    
+    if session_id is None:
+        session_id = str(uuid.uuid4())
+    
+    chat_history = PostgresChatMessageHistory(
+        table_name,
+        session_id,
+        sync_connection=sync_connection
+    )
+    
+    return chat_history
 
-    def clear_embeddings(self):
-        """Clear all existing embeddings from the database"""
-        with self.conn.cursor() as cursor:
-            cursor.execute("TRUNCATE TABLE embeddings")
-        self.conn.commit()
+def get_recent_chat_history(chat_history):
+    """Retrieve the last 5 messages from chat history as tuples of (query, response)."""
+    messages = chat_history.messages[-12:] if len(chat_history.messages) > 12 else chat_history.messages  # Get last 10 messages
+    chat_pairs = []
+
+   
+    for i in range(0, len(messages), 2): 
+        if i + 1 < len(messages):  
+            user_message = messages[i]
+            ai_message = messages[i + 1]
+            if isinstance(user_message, HumanMessage) and isinstance(ai_message, AIMessage):
+                chat_pairs.append((user_message.content, ai_message.content))
+
+    return chat_pairs[-5:]  
+
+def add_message_to_history(chat_history, role, content):
+   
+    if role == "system":
+        message = SystemMessage(content=content)
+    elif role == "ai":
+        message = AIMessage(content=content)
+    elif role == "human":
+        message = HumanMessage(content=content)
+    else:
+        raise ValueError("Invalid role specified")
+    
+    chat_history.add_message(message)
+
+def add_embedding_to_db(text_id, text_content):
+    """Add an embedding to the vector store."""
+    embedding = generate_embedding()  
+    vector_store = VectorStore(
+        embeddings=embedding,  
+        collection_name=collection_name,
+        connection=connection,
+        use_jsonb=True,
+    )
+    vector_store.add_texts([text_content], [text_id])  
+
+
+def add_chat_to_db(chat_history, query, response):
+    """Add a chat entry to the database."""
+    add_message_to_history(chat_history, "human", query)  
+    add_message_to_history(chat_history, "ai", response)   
+    
+
+
+
+
+
+
