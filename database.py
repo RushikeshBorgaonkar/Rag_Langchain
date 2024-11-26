@@ -1,3 +1,4 @@
+
 import os
 import uuid
 from dotenv import load_dotenv
@@ -87,8 +88,3 @@ def add_chat_to_db(chat_history, query, response):
     add_message_to_history(chat_history, "human", query)  
     add_message_to_history(chat_history, "ai", response)   
     
-
-
-
-
-

@@ -54,7 +54,13 @@
             display: flex;
             justify-content: space-between;
             margin-top: 20px;
+            position: sticky;
+            bottom: 20px;
+            background-color: white;
+            padding: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
+        
         input[type="text"] {
             flex: 1;
             padding: 10px;
@@ -92,15 +98,20 @@
         <p class="response">{{ result.generated_response }}</p>
         <div class="chat-history">
             <h3>Last 5 Chats:</h3>
-            <ul>
-                {% for chat in chat_history %}
-                    <li class="chat-item">
-                        <strong>Query:</strong> {{ chat[0] }} <br>
-                        <strong>Response:</strong> {{ chat[1] }}
-                    </li>
-                {% endfor %}
-            </ul>
+            {% if chat_history %}
+                <ul>
+                    {% for chat in chat_history %}
+                        <li class="chat-item">
+                            <strong>Query:</strong> {{ chat[0] }} <br>
+                            <strong>Response:</strong> {{ chat[1] }}
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No previous chat history available.</p>
+            {% endif %}
         </div>
+        
         <form method="POST">
             <input type="text" name="query" placeholder="Enter your next query" required>
             <button type="submit">Submit</button>

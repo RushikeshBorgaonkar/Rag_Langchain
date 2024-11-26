@@ -6,4 +6,3 @@ def generate_embedding():
     return embeddings
 
 
-
