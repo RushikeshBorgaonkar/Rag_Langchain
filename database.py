@@ -73,14 +73,15 @@ def add_message_to_history(chat_history, role, content):
 
 def add_embedding_to_db(text_id, text_content):
     """Add an embedding to the vector store."""
-    embedding = generate_embedding()  
+    embedding = generate_embedding()  # Assuming this generates the embeddings
     vector_store = VectorStore(
-        embeddings=embedding,  
+        embeddings=embedding,
         collection_name=collection_name,
         connection=connection,
         use_jsonb=True,
     )
-    vector_store.add_texts([text_content], [text_id])  
+    metadata = {"text_id": text_id}
+    vector_store.add_texts([text_content], metadatas=[metadata]) 
 
 
 def add_chat_to_db(chat_history, query, response):
@@ -88,3 +89,18 @@ def add_chat_to_db(chat_history, query, response):
     add_message_to_history(chat_history, "human", query)  
     add_message_to_history(chat_history, "ai", response)   
     
+
+def get_retriever():
+
+    embedding_model = generate_embedding() 
+    
+
+    vector_store = VectorStore(
+        embeddings=embedding_model,
+        collection_name=collection_name,
+        connection=connection,
+        use_jsonb=True,
+    )
+    
+    results = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
+    return results
