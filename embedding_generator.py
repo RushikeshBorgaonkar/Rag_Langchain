@@ -5,5 +5,3 @@ def generate_embedding():
     embeddings = HuggingFaceEmbeddings(model_name='BAAI/bge-small-en')
     return embeddings
 
-
-
